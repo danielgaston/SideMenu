@@ -6,23 +6,20 @@
 //
 
 /* Example usage:
-    // Define the menus
-    SideMenuManager.menuLeftNavigationController = storyboard!.instantiateViewControllerWithIdentifier("LeftMenuNavigationController") as? UISideMenuNavigationController
-    SideMenuManager.menuRightNavigationController = storyboard!.instantiateViewControllerWithIdentifier("RightMenuNavigationController") as? UISideMenuNavigationController
+ // Define the menus
+ SideMenuManager.menuLeftNavigationController = storyboard!.instantiateViewControllerWithIdentifier("LeftMenuNavigationController") as? UISideMenuNavigationController
+ SideMenuManager.menuRightNavigationController = storyboard!.instantiateViewControllerWithIdentifier("RightMenuNavigationController") as? UISideMenuNavigationController
+ 
+ // Enable gestures. The left and/or right menus must be set up above for these to work.
+ // Note that these continue to work on the Navigation Controller independent of the View Controller it displays!
+ SideMenuManager.menuAddPanGestureToPresent(toView: self.navigationController!.navigationBar)
+ SideMenuManager.menuAddScreenEdgePanGesturesToPresent(toView: self.navigationController!.view)
+ */
 
-    // Enable gestures. The left and/or right menus must be set up above for these to work.
-    // Note that these continue to work on the Navigation Controller independent of the View Controller it displays!
-    SideMenuManager.menuAddPanGestureToPresent(toView: self.navigationController!.navigationBar)
-    SideMenuManager.menuAddScreenEdgePanGesturesToPresent(toView: self.navigationController!.view)
-*/
-
-public class SideMenuManager {
+@objc public class SideMenuManager: NSObject {
     
-    public enum MenuPresentMode {
-        case MenuSlideIn
-        case ViewSlideOut
-        case ViewSlideInOut
-        case MenuDissolveIn
+    @objc public enum MenuPresentMode: Int {
+        case MenuSlideIn, ViewSlideOut, ViewSlideInOut, MenuDissolveIn
     }
     
     // Bounds which has been allocated for the app on the whole device screen
@@ -30,7 +27,7 @@ public class SideMenuManager {
         let appWindowRect = UIApplication.sharedApplication().keyWindow?.bounds ?? UIWindow().bounds
         return appWindowRect
     }
-
+    
     /**
      The presentation mode of the menu.
      
@@ -87,7 +84,6 @@ public class SideMenuManager {
     /// Draws the `menuAnimationBackgroundColor` behind the status bar. Default is true.
     public static var menuFadeStatusBar = true
     
-    /// - Warning: Deprecated. Use `menuAnimationTransformScaleFactor` instead.
     @available(*, deprecated, renamed="menuAnimationTransformScaleFactor")
     public static var menuAnimationShrinkStrength: CGFloat {
         get {
@@ -99,18 +95,47 @@ public class SideMenuManager {
     }
     
     // prevent instantiation
-    private init() {}
+    private override init() {}
     
     /**
      The blur effect style of the menu if the menu's root view controller is a UITableViewController or UICollectionViewController.
      
      - Note: If you want cells in a UITableViewController menu to show vibrancy, make them a subclass of UITableViewVibrantCell.
      */
-    public static var menuBlurEffectStyle: UIBlurEffectStyle? {
+    public static var menuBlurEffectStyle: UIBlurEffectStyle! {
         didSet {
             if oldValue != menuBlurEffectStyle {
                 updateMenuBlurIfNecessary()
             }
+        }
+    }
+    
+    public static var menuHideWhenViewDidDisappear: Bool = true
+    
+    public static var menuBlurEffect: UIBlurEffect?
+    public static var menuBlurView: UIVisualEffectView? {
+        didSet {
+            menuBlurViewSetupHandler?(menuBlurView: menuBlurView)
+        }
+    }
+    
+    public static var menuBlurViewSetupHandler: ((menuBlurView: UIVisualEffectView?) -> ())?
+    
+    
+    public class func setMunuBlurWithIndex(index: NSInteger) {
+        switch index {
+        case 0:
+            menuBlurEffectStyle = UIBlurEffectStyle.ExtraLight
+            break
+        case 1:
+            menuBlurEffectStyle = UIBlurEffectStyle.Light
+            break
+        case 2:
+            menuBlurEffectStyle = UIBlurEffectStyle.Dark
+            break
+            
+        default:
+            print("Cannot get Blur style for for index: \(index)")
         }
     }
     
@@ -185,7 +210,7 @@ public class SideMenuManager {
             menuBlurEffectStyle = menuBlurEffectStyle,
             view = forMenu.visibleViewController?.view
             where !UIAccessibilityIsReduceTransparencyEnabled() else {
-            return
+                return
         }
         
         if forMenu.originalMenuBackgroundColor == nil {
@@ -193,6 +218,7 @@ public class SideMenuManager {
         }
         
         let blurEffect = UIBlurEffect(style: menuBlurEffectStyle)
+        menuBlurEffect = blurEffect
         let blurView = UIVisualEffectView(effect: blurEffect)
         view.backgroundColor = UIColor.clearColor()
         if let tableViewController = forMenu.visibleViewController as? UITableViewController {
@@ -203,6 +229,7 @@ public class SideMenuManager {
             blurView.autoresizingMask = [.FlexibleHeight, .FlexibleWidth]
             blurView.frame = view.bounds
             view.insertSubview(blurView, atIndex: 0)
+            menuBlurView = blurView
         }
     }
     
@@ -210,7 +237,7 @@ public class SideMenuManager {
         guard let forMenu = forMenu,
             originalMenuBackgroundColor = forMenu.originalMenuBackgroundColor,
             view = forMenu.visibleViewController?.view else {
-            return
+                return
         }
         
         view.backgroundColor = originalMenuBackgroundColor
@@ -223,6 +250,8 @@ public class SideMenuManager {
         } else if let blurView = view.subviews[0] as? UIVisualEffectView {
             blurView.removeFromSuperview()
         }
+        
+        self.menuBlurView = nil
     }
     
     /**
@@ -230,7 +259,7 @@ public class SideMenuManager {
      
      - Parameter toView: The view to add gestures to.
      - Parameter forMenu: The menu (left or right) you want to add a gesture for. If unspecified, gestures will be added for both sides.
- 
+     
      - Returns: The array of screen edge gestures added to `toView`.
      */
     public class func menuAddScreenEdgePanGesturesToPresent(toView toView: UIView, forMenu:UIRectEdge? = nil) -> [UIScreenEdgePanGestureRecognizer] {
